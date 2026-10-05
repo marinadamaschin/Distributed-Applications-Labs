@@ -1,0 +1,1 @@
+package md.utm.messaging.broker; public final class BrokerApplication {public static void main(String[]args)throws Exception{int port=Integer.parseInt(System.getenv().getOrDefault("BROKER_PORT","5000"));var o=new BrokerOptions(port,3,300);var s=new BrokerStorage();var r=new ConsumerRegistry();var e=new BrokerEngine(s,r,o);try(var server=new BrokerServer(o,e,r)){server.run();}}}

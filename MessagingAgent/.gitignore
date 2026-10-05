@@ -1,0 +1,10 @@
+target/
+.idea/
+.vs/
+*.iml
+effects-consumer-*.log
+processed-consumer-*.txt
+*.log
+.env
+.env.*
+!.env.example
