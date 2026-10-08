@@ -13,6 +13,7 @@ public final class ConsumerClient {
     private final ConsumerMode mode;
     private final DeduplicationStore dedup;
     private final Path effects;
+    private volatile boolean unsubscribeRequested = false;
 
     public ConsumerClient(String h, int p, String id, String d, ConsumerMode m, Path dataDir) throws IOException {
         host = h;
@@ -25,22 +26,106 @@ public final class ConsumerClient {
     }
 
     public void run() throws IOException {
-        try (Socket s = new Socket(host, port); var r = JsonLineProtocol.reader(s.getInputStream()); var w = JsonLineProtocol.writer(s.getOutputStream())) {
-            JsonLineProtocol.write(w, TransportFrame.register(consumerId, destination));
-            TransportFrame reg = JsonLineProtocol.read(r);
-            if (!"registered".equals(reg.kind())) throw new IOException("Registration rejected");
-            System.out.println("Registered " + consumerId + " -> " + destination + " mode=" + mode);
-            while (true) {
-                TransportFrame f = JsonLineProtocol.read(r);
-                if (!"delivery".equals(f.kind()) || f.message() == null) continue;
-                process(f, w);
+
+        final long reconnectDelayMs = 2000;
+
+        while (!Thread.currentThread().isInterrupted()
+                && !unsubscribeRequested) {
+
+            try (Socket socket = new Socket(host, port);
+                 var reader = JsonLineProtocol.reader(
+                         socket.getInputStream());
+                 var writer = JsonLineProtocol.writer(
+                         socket.getOutputStream())) {
+
+                JsonLineProtocol.write(
+                        writer,
+                        TransportFrame.register(
+                                consumerId, destination));
+
+                TransportFrame registration =
+                        JsonLineProtocol.read(reader);
+
+                if (!"registered".equals(registration.kind())) {
+                    throw new IOException(
+                            "Registration rejected: "
+                                    + registration.kind());
+                }
+
+                System.out.println(
+                        "Registered " + consumerId
+                                + " -> " + destination
+                                + " mode=" + mode);
+
+                while (!Thread.currentThread().isInterrupted()
+                        && !unsubscribeRequested) {
+
+                    TransportFrame frame =
+                            JsonLineProtocol.read(reader);
+
+                    if (!"delivery".equals(frame.kind())
+                            || frame.message() == null) {
+                        continue;
+                    }
+
+                    process(frame, writer);
+                }
+
+            } catch (IOException e) {
+
+                if (Thread.currentThread().isInterrupted()
+                        || unsubscribeRequested) {
+                    break;
+                }
+
+                System.err.println(
+                        "[RECONNECT] Consumer " + consumerId
+                                + " disconnected: "
+                                + e.getMessage());
+
+            }
+
+            if (Thread.currentThread().isInterrupted()
+                    || unsubscribeRequested) {
+                break;
+            }
+
+            try {
+                Thread.sleep(reconnectDelayMs);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
+
+        System.out.println(
+                "Consumer stopped: " + consumerId);
     }
 
     private void process(TransportFrame f, BufferedWriter w) throws IOException {
         MessageEnvelope m = f.message();
         StructuredLog.write("INFO", "consumer", "RECEIVED", m, null, "consumer=" + consumerId + " attempt=" + f.attempt());
+        if (mode == ConsumerMode.NO_ACK) {
+            StructuredLog.write(
+                    "WARN",
+                    "consumer",
+                    "NO_ACK_SIMULATION",
+                    m,
+                    "simulated-hang",
+                    "consumer=" + consumerId
+            );
+
+            try {
+                Thread.sleep(15_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(
+                        "NO_ACK simulation interrupted", e);
+            }
+
+            return;
+        }
         if (dedup.contains(m.id())) {
             StructuredLog.write("INFO", "consumer", "DUPLICATE", m, "effect-skipped", "consumer=" + consumerId);
             JsonLineProtocol.write(w, TransportFrame.ack(m.id()));
@@ -68,4 +153,43 @@ public final class ConsumerClient {
             JsonLineProtocol.write(w, TransportFrame.nack(m.id(), e.getMessage()));
         }
     }
+
+
+    public boolean unsubscribe() throws IOException {
+
+        try (Socket socket = new Socket(host, port);
+             var reader = JsonLineProtocol.reader(
+                     socket.getInputStream());
+             var writer = JsonLineProtocol.writer(
+                     socket.getOutputStream())) {
+
+            socket.setSoTimeout(3000);
+
+            JsonLineProtocol.write(
+                    writer,
+                    TransportFrame.unsubscribe(
+                            consumerId, destination)
+            );
+
+            TransportFrame response =
+                    JsonLineProtocol.read(reader);
+
+            boolean confirmed =
+                    "unsubscribed".equals(response.kind())
+                            && Boolean.TRUE.equals(response.success())
+                            && consumerId.equals(response.consumerId())
+                            && destination.equals(response.destination());
+
+            if (confirmed) {
+                unsubscribeRequested = true;
+                System.out.println(
+                        "Unsubscribed: " + consumerId
+                                + " -> " + destination);
+            }
+
+            return confirmed;
+        }
+    }
+
+
 }
