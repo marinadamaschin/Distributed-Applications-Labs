@@ -1,1 +1,17 @@
+# IntelliJ
 .idea/
+**/.idea/
+*.iml
+
+# Maven
+**/target/
+
+# Date generate in radacina repository-ului
+/data/
+effects-*.log
+processed-*.txt
+
+# Configuratii locale
+**/.env
+**/.env.*
+!**/.env.example
