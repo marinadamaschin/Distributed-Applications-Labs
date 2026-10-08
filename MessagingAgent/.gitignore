@@ -1,10 +1,35 @@
+
+# Maven
 target/
+
+# IDE
 .idea/
 .vs/
 *.iml
+
+# Consumer - efecte locale si deduplicare
 effects-consumer-*.log
 processed-consumer-*.txt
+
+# Loguri
 *.log
+
+# SQLite - baze de date si fisiere auxiliare
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Backup-uri generate
+backups/
+backup/
+
+# Configuratie locala
 .env
 .env.*
 !.env.example
