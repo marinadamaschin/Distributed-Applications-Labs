@@ -1,2 +1,26 @@
-package md.utm.messaging.failure; import md.utm.messaging.consumers.DeduplicationStore; import org.junit.jupiter.api.*; import static org.junit.jupiter.api.Assertions.*; import java.nio.file.*;
-class DeduplicationTest {@Test void processedIdSurvivesRestart()throws Exception{Path p=Files.createTempFile("dedup-",".txt");try{Files.deleteIfExists(p);var first=new DeduplicationStore(p);assertFalse(first.contains("msg-1"));first.markProcessed("msg-1");var restarted=new DeduplicationStore(p);assertTrue(restarted.contains("msg-1"));assertFalse(restarted.contains("msg-2"));}finally{Files.deleteIfExists(p);}}}
+package md.utm.messaging.failure;
+
+import md.utm.messaging.consumers.DeduplicationStore;
+import org.junit.jupiter.api.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.nio.file.*;
+
+class DeduplicationTest {
+    @Test
+    void processedIdSurvivesRestart() throws Exception {
+        Path p = Files.createTempFile("dedup-", ".txt");
+        try {
+            Files.deleteIfExists(p);
+            var first = new DeduplicationStore(p);
+            assertFalse(first.contains("msg-1"));
+            first.markProcessed("msg-1");
+            var restarted = new DeduplicationStore(p);
+            assertTrue(restarted.contains("msg-1"));
+            assertFalse(restarted.contains("msg-2"));
+        } finally {
+            Files.deleteIfExists(p);
+        }
+    }
+}

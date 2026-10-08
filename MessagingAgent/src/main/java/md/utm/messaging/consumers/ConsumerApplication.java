@@ -1,2 +1,16 @@
-package md.utm.messaging.consumers; import java.nio.file.*;
-public final class ConsumerApplication {public static void main(String[]args)throws Exception{if(args.length<3){System.out.println("Usage: <consumerId> <destination> <normal|always-nack|crash-before-ack>");return;}String host=System.getenv().getOrDefault("BROKER_HOST","127.0.0.1");int port=Integer.parseInt(System.getenv().getOrDefault("BROKER_PORT","5000"));Path data=Path.of(System.getenv().getOrDefault("DATA_DIR","."));new ConsumerClient(host,port,args[0],args[1],ConsumerMode.parse(args[2]),data).run();}}
+package md.utm.messaging.consumers;
+
+import java.nio.file.*;
+
+public final class ConsumerApplication {
+    public static void main(String[] args) throws Exception {
+        if (args.length < 3) {
+            System.out.println("Usage: <consumerId> <destination> <normal|always-nack|crash-before-ack>");
+            return;
+        }
+        String host = System.getenv().getOrDefault("BROKER_HOST", "127.0.0.1");
+        int port = Integer.parseInt(System.getenv().getOrDefault("BROKER_PORT", "5000"));
+        Path data = Path.of(System.getenv().getOrDefault("DATA_DIR", "."));
+        new ConsumerClient(host, port, args[0], args[1], ConsumerMode.parse(args[2]), data).run();
+    }
+}
