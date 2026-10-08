@@ -1,3 +1,28 @@
-package md.utm.messaging.contract; import md.utm.messaging.contracts.*; import org.junit.jupiter.api.*; import static org.junit.jupiter.api.Assertions.*; import java.time.*;
-class JsonContractTest {@Test void jsonUsesExpectedNamesAndRoundTrips()throws Exception{var m=MessageFactory.create("Test","orders","{}","corr-test");String j=JsonLineProtocol.mapper().writeValueAsString(m);for(String n:new String[]{"messageId","occurredAt","correlationId","schemaVersion","messageType","destination","payload"})assertTrue(j.contains("\""+n+"\""));var copy=JsonLineProtocol.mapper().readValue(j,MessageEnvelope.class);assertEquals(m.id(),copy.id());assertEquals("1.0",copy.schemaVersion());assertEquals(ZoneOffset.UTC,copy.timestamp().getOffset());}
-@Test void unknownOptionalFieldIsIgnored()throws Exception{String j="{\"messageId\":\"m1\",\"occurredAt\":\"2026-01-01T00:00:00Z\",\"correlationId\":\"c1\",\"schemaVersion\":\"1.0\",\"messageType\":\"T\",\"destination\":\"orders\",\"payload\":\"{}\",\"futureField\":true}";assertEquals("m1",JsonLineProtocol.mapper().readValue(j,MessageEnvelope.class).id());}}
+package md.utm.messaging.contract;
+
+import md.utm.messaging.contracts.*;
+import org.junit.jupiter.api.*;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.time.*;
+
+class JsonContractTest {
+    @Test
+    void jsonUsesExpectedNamesAndRoundTrips() throws Exception {
+        var m = MessageFactory.create("Test", "orders", "{}", "corr-test");
+        String j = JsonLineProtocol.mapper().writeValueAsString(m);
+        for (String n : new String[]{"messageId", "occurredAt", "correlationId", "schemaVersion", "messageType", "destination", "payload"})
+            assertTrue(j.contains("\"" + n + "\""));
+        var copy = JsonLineProtocol.mapper().readValue(j, MessageEnvelope.class);
+        assertEquals(m.id(), copy.id());
+        assertEquals("1.0", copy.schemaVersion());
+        assertEquals(ZoneOffset.UTC, copy.timestamp().getOffset());
+    }
+
+    @Test
+    void unknownOptionalFieldIsIgnored() throws Exception {
+        String j = "{\"messageId\":\"m1\",\"occurredAt\":\"2026-01-01T00:00:00Z\",\"correlationId\":\"c1\",\"schemaVersion\":\"1.0\",\"messageType\":\"T\",\"destination\":\"orders\",\"payload\":\"{}\",\"futureField\":true}";
+        assertEquals("m1", JsonLineProtocol.mapper().readValue(j, MessageEnvelope.class).id());
+    }
+}
