@@ -36,4 +36,37 @@ public record TransportFrame(String kind, MessageEnvelope message, String messag
     public static TransportFrame error(String reason) {
         return new TransportFrame("error", null, null, null, null, false, reason, null);
     }
+
+    public static TransportFrame unsubscribe(
+            String consumerId,
+            String destination) {
+
+        return new TransportFrame(
+                "unsubscribe",
+                null,
+                null,
+                consumerId,
+                destination,
+                null,
+                null,
+                null
+        );
+    }
+
+    public static TransportFrame unsubscribed(
+            String consumerId,
+            String destination) {
+
+        return new TransportFrame(
+                "unsubscribed",
+                null,
+                null,
+                consumerId,
+                destination,
+                true,
+                null,
+                null
+        );
+    }
+
 }

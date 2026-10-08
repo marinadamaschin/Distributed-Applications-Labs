@@ -1,22 +1,39 @@
 package md.utm.messaging.broker;
 
-import md.utm.messaging.contracts.*;
+import md.utm.messaging.contracts.JsonLineProtocol;
+import md.utm.messaging.contracts.MessageEnvelope;
+import md.utm.messaging.contracts.TransportFrame;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
 import java.net.Socket;
 
 public final class ConsumerConnection implements AutoCloseable {
-    private final String consumerId, destination;
+
+    private static final int ACK_TIMEOUT_MS = 5000;
+
+    private final String consumerId;
+    private final String destination;
     private final Socket socket;
     private final BufferedReader reader;
     private final BufferedWriter writer;
 
-    public ConsumerConnection(String id, String dest, Socket s, BufferedReader r, BufferedWriter w) {
-        consumerId = id;
-        destination = dest;
-        socket = s;
-        reader = r;
-        writer = w;
+    public ConsumerConnection(
+            String id,
+            String dest,
+            Socket socket,
+            BufferedReader reader,
+            BufferedWriter writer) throws IOException {
+
+        this.consumerId = id;
+        this.destination = dest;
+        this.socket = socket;
+        this.reader = reader;
+        this.writer = writer;
+
+        // Limita de asteptare pentru ACK/NACK.
+        this.socket.setSoTimeout(ACK_TIMEOUT_MS);
     }
 
     public String consumerId() {
@@ -27,14 +44,36 @@ public final class ConsumerConnection implements AutoCloseable {
         return destination;
     }
 
-    public synchronized boolean deliver(MessageEnvelope m, int attempt) throws IOException {
-        JsonLineProtocol.write(writer, TransportFrame.delivery(m, attempt));
-        TransportFrame f = JsonLineProtocol.read(reader);
-        if ("ack".equals(f.kind()) && m.id().equals(f.messageId())) return true;
-        if ("nack".equals(f.kind()) && m.id().equals(f.messageId())) return false;
-        throw new IOException("Expected ACK/NACK for message " + m.id());
+    public synchronized boolean deliver(
+            MessageEnvelope message,
+            int attempt) throws IOException {
+
+        JsonLineProtocol.write(
+                writer,
+                TransportFrame.delivery(message, attempt));
+
+        TransportFrame response = JsonLineProtocol.read(reader);
+
+        if (response == null) {
+            throw new IOException(
+                    "Subscriber disconnected before ACK");
+        }
+
+        if ("ack".equals(response.kind())
+                && message.id().equals(response.messageId())) {
+            return true;
+        }
+
+        if ("nack".equals(response.kind())
+                && message.id().equals(response.messageId())) {
+            return false;
+        }
+
+        throw new IOException(
+                "Invalid ACK/NACK for message " + message.id());
     }
 
+    @Override
     public void close() throws IOException {
         socket.close();
     }
