@@ -1,12 +1,17 @@
 package md.utm.messaging.consumers;
 
 public enum ConsumerMode {
-    NORMAL, ALWAYS_NACK, CRASH_BEFORE_ACK;
+
+    NORMAL,
+    ALWAYS_NACK,
+    CRASH_BEFORE_ACK,
+    NO_ACK;
 
     public static ConsumerMode parse(String s) {
         return switch (s.toLowerCase()) {
             case "always-nack" -> ALWAYS_NACK;
             case "crash-before-ack" -> CRASH_BEFORE_ACK;
+            case "no-ack" -> NO_ACK;
             default -> NORMAL;
         };
     }
