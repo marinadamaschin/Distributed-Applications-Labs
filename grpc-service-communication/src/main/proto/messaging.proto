@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.service.grpc.service";
+option java_outer_classname = "MessagingContract";
+
+package service;
+
+service MessagingService {
+    rpc Publish (PublishRequest) returns (PublishReply);
+    rpc Subscribe (SubscribeRequest) returns (stream Delivery);
+    rpc Ack (AckRequest) returns (AckReply);
+    rpc Nack (NackRequest) returns (AckReply);
+    rpc Unsubscribe (UnsubscribeRequest) returns (AckReply);
+    rpc GetStatus (StatusRequest) returns (StatusReply);
+}
+
+message PublishRequest {
+    string message_id = 1;
+    string topic = 2;
+    string payload = 3;
+    string message_type = 4;
+    string correlation_id = 5;
+    string occurred_at = 6;
+    string schema_version = 7;
+}
+
+message PublishReply {
+    bool accepted = 1;
+    string detail = 2;
+}
+
+message SubscribeRequest {
+    string consumer_id = 1;
+    string topic = 2;
+}
+
+message Delivery {
+    string message_id = 1;
+    string topic = 2;
+    string payload = 3;
+    string message_type = 4;
+    string correlation_id = 5;
+    string occurred_at = 6;
+    int32 attempt = 7;
+    string schema_version = 8;
+}
+
+message AckRequest {
+    string consumer_id = 1;
+    string message_id = 2;
+}
+
+message NackRequest {
+    string consumer_id = 1;
+    string message_id = 2;
+    string reason = 3;
+}
+
+message UnsubscribeRequest {
+    string consumer_id = 1;
+    string topic = 2;
+}
+
+message StatusRequest {
+}
+
+message StatusReply {
+    int32 messages = 1;
+    int32 pending = 2;
+    int32 dead_letter = 3;
+    int32 subscriptions = 4;
+}
+
+message AckReply {
+    bool accepted = 1;
+    string detail = 2;
+}

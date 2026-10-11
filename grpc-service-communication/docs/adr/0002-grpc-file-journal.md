@@ -1,0 +1,8 @@
+# ADR 0002: gRPC transport and file-based persistence
+
+- **Status:** Accepted for Project 2 prototype
+- **Context:** The previous implementation used TCP sockets with a custom JSON framing protocol and SQLite. The assignment requires RPC, a declared contract, resilient delivery, persistence, ACK/retry/DLQ, and load distribution.
+- **Decision:** Use gRPC over HTTP/2 with Protocol Buffers (`messaging.proto`). Persist domain events to an append-only JSONL journal; force each event to disk before returning successful Publish/ACK responses. Use file locks for coordinated appends/replay and client-side round-robin plus endpoint failover. Broker instances in a load-balanced setup must share a journal on a filesystem with reliable locking.
+- **Alternatives:** Keep raw sockets (rejected because RPC is the learning objective); keep SQLite (rejected for this variant because file persistence was explicitly requested); use a distributed database or replicated log (out of scope for a 4-hour lab).
+- **Consequences:** Contract and transport are explicit; JSONL is inspectable and supports event replay/backups. The design is simpler to demonstrate but file replay cost grows with journal size, shared-storage semantics matter, and this is not a consensus/replication protocol.
+- **Known limitation:** At-least-once delivery can produce duplicates; exactly-once side effects are not guaranteed. DLQ entries persist, but no administrative redrive RPC is included.
