@@ -1,7 +1,6 @@
 package com.service.grpc.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.service.grpc.service.Delivery;
 import com.service.grpc.service.PublishRequest;
 
 import java.io.IOException;
@@ -103,6 +102,10 @@ public final class FileMessageStore {
             reload();
             long now = System.currentTimeMillis();
 
+            if (!subscriptions.contains(key(consumer, topic))) {
+                return;
+            }
+
             for (StoredMessage m : messages.values()) {
                 String k = key(consumer, m.messageId());
 
@@ -137,28 +140,30 @@ public final class FileMessageStore {
     }
 
     public synchronized boolean ack(String consumer, String messageId) throws IOException {
+        final boolean[] accepted = {false};
         withFileLock(() -> {
             reload();
 
-            if (!messages.containsKey(messageId)) {
+            StoredMessage message = messages.get(messageId);
+            if (message == null || !subscriptions.contains(key(consumer, message.topic()))) {
                 return;
             }
 
             String k = key(consumer, messageId);
-
             if (!acknowledgements.contains(k)) {
                 appendUnlocked(Map.of("event", "ack", "consumerId", consumer, "messageId", messageId));
                 acknowledgements.add(k);
             }
+            accepted[0] = true;
         });
-
-        return messages.containsKey(messageId);
+        return accepted[0];
     }
 
     public synchronized boolean nack(String consumer, String messageId, String reason) throws IOException {
         reload();
 
-        if (!messages.containsKey(messageId)) {
+        StoredMessage message = messages.get(messageId);
+        if (message == null || !subscriptions.contains(key(consumer, message.topic()))) {
             return false;
         }
 
@@ -168,8 +173,10 @@ public final class FileMessageStore {
             return false;
         }
 
-        append(Map.of("event", "nack", "consumerId", consumer, "messageId", messageId, "reason", reason == null ? "" : reason, "at", System.currentTimeMillis()));
-        lastDelivery.put(k, 0L);
+        long now = System.currentTimeMillis();
+        append(Map.of("event", "nack", "consumerId", consumer, "messageId", messageId, "reason", reason == null ? "" : reason, "at", now));
+
+        lastDelivery.put(k, now);
 
         if (attempts.getOrDefault(k, 0) >= MAX_ATTEMPTS) {
             deadLetter(consumer, messageId, "maximum attempts reached after NACK");
@@ -273,23 +280,24 @@ public final class FileMessageStore {
 
             String event = String.valueOf(e.get("event"));
 
-            if (event.equals("publish")) {
-                StoredMessage m = mapper.convertValue(e.get("message"), StoredMessage.class);
-                messages.putIfAbsent(m.messageId(), m);
-            } else if (event.equals("ack")) {
-                acknowledgements.add(key(str(e, "consumerId"), str(e, "messageId")));
-            } else if (event.equals("delivery")) {
-                String k = key(str(e, "consumerId"), str(e, "messageId"));
-                attempts.put(k, ((Number) e.get("attempt")).intValue());
-                lastDelivery.put(k, ((Number) e.get("at")).longValue());
-            } else if (event.equals("nack")) {
-                lastDelivery.put(key(str(e, "consumerId"), str(e, "messageId")), 0L);
-            } else if (event.equals("dlq")) {
-                deadLetters.add(key(str(e, "consumerId"), str(e, "messageId")));
-            } else if (event.equals("subscribe")) {
-                subscriptions.add(key(str(e, "consumerId"), str(e, "topic")));
-            } else if (event.equals("unsubscribe")) {
-                subscriptions.remove(key(str(e, "consumerId"), str(e, "topic")));
+            switch (event) {
+                case "publish" -> {
+                    StoredMessage m = mapper.convertValue(e.get("message"), StoredMessage.class);
+                    messages.putIfAbsent(m.messageId(), m);
+                }
+                case "ack" -> acknowledgements.add(key(str(e, "consumerId"), str(e, "messageId")));
+                case "delivery" -> {
+                    String k = key(str(e, "consumerId"), str(e, "messageId"));
+                    attempts.put(k, ((Number) e.get("attempt")).intValue());
+                    lastDelivery.put(k, ((Number) e.get("at")).longValue());
+                }
+                case "nack" -> lastDelivery.put(
+                        key(str(e, "consumerId"), str(e, "messageId")),
+                        ((Number) e.get("at")).longValue()
+                );
+                case "dlq" -> deadLetters.add(key(str(e, "consumerId"), str(e, "messageId")));
+                case "subscribe" -> subscriptions.add(key(str(e, "consumerId"), str(e, "topic")));
+                case "unsubscribe" -> subscriptions.remove(key(str(e, "consumerId"), str(e, "topic")));
             }
         }
     }

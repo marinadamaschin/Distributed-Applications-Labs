@@ -1,0 +1,10 @@
+{"consumerId":"consumer-c","topic":"orders","event":"subscribe"}
+{"message":{"messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3","topic":"orders","payload":"{\"orderId\":\"ORD-1001\",\"amount\":42.50}","messageType":"OrderCreated","correlationId":"fc4500e3-f0e4-4105-b44b-12922dde98af","occurredAt":"2026-10-13T00:06:53.323153322+03:00","schemaVersion":"1.0"},"event":"publish"}
+{"message":{"messageId":"52f9ef6a-9324-47f3-82d7-c0effc539e4e","topic":"audit","payload":"{\"orderId\":\"ORD-1001\",\"amount\":42.50}","messageType":"AuditEvent","correlationId":"fc4500e3-f0e4-4105-b44b-12922dde98af","occurredAt":"2026-10-13T00:06:53.638347785+03:00","schemaVersion":"1.0"},"event":"publish"}
+{"event":"delivery","at":1791839213783,"consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3","attempt":1}
+{"event":"nack","at":1791839213827,"reason":"failure injection: always-nack","consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3"}
+{"event":"delivery","at":1791839215052,"consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3","attempt":2}
+{"event":"nack","at":1791839215062,"reason":"failure injection: always-nack","consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3"}
+{"event":"delivery","at":1791839217070,"consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3","attempt":3}
+{"event":"nack","at":1791839217087,"reason":"failure injection: always-nack","consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3"}
+{"event":"dlq","at":"2026-10-12T21:06:57.091388304Z","reason":"maximum attempts reached after NACK","consumerId":"consumer-c","messageId":"b804f6af-bb99-43c2-bcf9-04ca6f8e47a3"}

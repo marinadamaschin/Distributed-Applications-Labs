@@ -1,6 +1,7 @@
 package com.service.grpc;
 
-import com.service.grpc.*;
+import com.service.grpc.service.PublishRequest;
+import com.service.grpc.store.FileMessageStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,11 +47,21 @@ class FileMessageStoreTest {
         s.publish(request("m1", "{}"));
         s.subscribe("c1", "orders");
 
-        for (int i = 0; i < 3; i++) {
-            var delivery = s.pending("c1", "orders");
-            assertFalse(delivery.isEmpty());
-            s.nack("c1", "m1", "test failure");
-        }
+        var first = s.pending("c1", "orders");
+        assertFalse(first.isEmpty());
+        s.nack("c1", "m1", "test failure");
+        assertTrue(s.pending("c1", "orders").isEmpty(), "NACK must respect retry backoff");
+
+        Thread.sleep(1_100);
+        var second = s.pending("c1", "orders");
+        assertFalse(second.isEmpty());
+        s.nack("c1", "m1", "test failure");
+
+        assertTrue(s.pending("c1", "orders").isEmpty(), "second retry must also be delayed");
+        Thread.sleep(2_100);
+        var third = s.pending("c1", "orders");
+        assertFalse(third.isEmpty());
+        s.nack("c1", "m1", "test failure");
 
         assertEquals(1, s.deadLetterCount());
 

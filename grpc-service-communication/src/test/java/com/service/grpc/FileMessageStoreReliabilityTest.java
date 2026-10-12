@@ -1,6 +1,7 @@
 package com.service.grpc;
 
-import com.service.grpc.*;
+import com.service.grpc.service.PublishRequest;
+import com.service.grpc.store.FileMessageStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -55,6 +56,7 @@ class FileMessageStoreReliabilityTest {
         FileMessageStore store = new FileMessageStore(temp.resolve("messages.jsonl"));
         assertFalse(store.ack("consumer-a", "missing"));
         store.publish(request("m1", "orders", "one"));
+        store.subscribe("consumer-a", "orders");
 
         assertTrue(store.ack("consumer-a", "m1"));
         assertTrue(store.ack("consumer-a", "m1"));
@@ -74,6 +76,24 @@ class FileMessageStoreReliabilityTest {
         store.ack("consumer-a", "m1");
         assertTrue(store.pending("consumer-a", "orders").isEmpty());
         assertEquals(1, store.pending("consumer-b", "orders").size());
+    }
+
+    @Test
+    void deliveryAckAndNackRequireConsumerTopicSubscription() throws Exception {
+        FileMessageStore store = new FileMessageStore(temp.resolve("messages.jsonl"));
+        store.publish(request("m1", "orders", "one"));
+
+        assertTrue(store.pending("consumer-a", "orders").isEmpty());
+        assertFalse(store.ack("consumer-a", "m1"));
+        assertFalse(store.nack("consumer-a", "m1", "not subscribed"));
+
+        store.subscribe("consumer-a", "orders");
+        assertEquals(1, store.pending("consumer-a", "orders").size());
+        store.unsubscribe("consumer-a", "orders");
+
+        assertTrue(store.pending("consumer-a", "orders").isEmpty());
+        assertFalse(store.ack("consumer-a", "m1"));
+        assertFalse(store.nack("consumer-a", "m1", "subscription removed"));
     }
 
     @Test

@@ -1,11 +1,8 @@
 package com.service.grpc;
 
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
-import io.grpc.StatusRuntimeException;
-import com.service.grpc.*;
+import com.service.grpc.service.*;
+import com.service.grpc.store.FileMessageStore;
+import io.grpc.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,6 +72,7 @@ class GrpcMessagingServiceIntegrationTest {
     @Test
     void subscribeAckAndUnsubscribeUpdateStatus() {
         stub.publish(request("m1", "{}"));
+        stub.subscribe(SubscribeRequest.newBuilder().setConsumerId("c1").setTopic("orders").build());
         assertTrue(stub.ack(AckRequest.newBuilder().setConsumerId("c1").setMessageId("m1").build()).getAccepted());
         assertTrue(stub.unsubscribe(UnsubscribeRequest.newBuilder().setConsumerId("c1").setTopic("orders").build()).getAccepted());
 
