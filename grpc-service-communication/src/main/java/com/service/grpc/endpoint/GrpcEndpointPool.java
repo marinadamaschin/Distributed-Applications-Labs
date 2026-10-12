@@ -21,20 +21,39 @@ public final class GrpcEndpointPool implements AutoCloseable {
             String[] parts = endpoint.trim().split(":", 2);
 
             if (parts.length != 2) {
-                throw new IllegalArgumentException("Endpoint must be host:port: " + endpoint);
-            };
+                throw new IllegalArgumentException(
+                        "Endpoint must be host:port: " + endpoint
+                );
+            }
 
-            channels.add(ManagedChannelBuilder.forAddress(parts[0], Integer.parseInt(parts[1])).usePlaintext().build());
+            channels.add(
+                    ManagedChannelBuilder
+                            .forAddress(parts[0], Integer.parseInt(parts[1]))
+                            .usePlaintext()
+                            .build()
+            );
         }
 
         if (channels.isEmpty()) {
-            throw new IllegalArgumentException("At least one gRPC endpoint is required");
-        };
+            throw new IllegalArgumentException(
+                    "At least one gRPC endpoint is required"
+            );
+        }
     }
 
-    public MessagingServiceGrpc.MessagingServiceBlockingStub nextBlockingStub(long deadlineSeconds) {
-        ManagedChannel channel = channels.get(Math.floorMod(cursor.getAndIncrement(), channels.size()));
-        return MessagingServiceGrpc.newBlockingStub(channel).withDeadlineAfter(deadlineSeconds, TimeUnit.SECONDS);
+    public MessagingServiceGrpc.MessagingServiceBlockingStub nextBlockingStub() {
+        ManagedChannel channel = channels.get(
+                Math.floorMod(cursor.getAndIncrement(), channels.size())
+        );
+
+        return MessagingServiceGrpc.newBlockingStub(channel);
+    }
+
+    public MessagingServiceGrpc.MessagingServiceBlockingStub nextBlockingStub(
+            long deadlineSeconds) {
+        return nextBlockingStub().withDeadlineAfter(
+                deadlineSeconds, TimeUnit.SECONDS
+        );
     }
 
     public PublishReply publishWithFailover(PublishRequest request) {
@@ -42,32 +61,39 @@ public final class GrpcEndpointPool implements AutoCloseable {
         int start = Math.floorMod(cursor.getAndIncrement(), channels.size());
 
         for (int i = 0; i < channels.size(); i++) {
-            ManagedChannel channel = channels.get((start + i) % channels.size());
+            ManagedChannel channel =
+                    channels.get((start + i) % channels.size());
 
             try {
-                return MessagingServiceGrpc.newBlockingStub(channel).withDeadlineAfter(5, TimeUnit.SECONDS).publish(request);
+                return MessagingServiceGrpc.newBlockingStub(channel)
+                        .withDeadlineAfter(5, TimeUnit.SECONDS)
+                        .publish(request);
             } catch (RuntimeException e) {
                 last = e;
             }
         }
 
-        throw new IllegalStateException("All configured gRPC broker endpoints failed; safe to retry with the same message_id", last);
+        throw new IllegalStateException(
+                "All configured gRPC broker endpoints failed; "
+                        + "safe to retry with the same message_id",
+                last
+        );
     }
 
     @Override
     public void close() {
-        for (ManagedChannel c : channels) {
-            c.shutdown();
+        for (ManagedChannel channel : channels) {
+            channel.shutdown();
         }
 
-        for (ManagedChannel c : channels) {
+        for (ManagedChannel channel : channels) {
             try {
-                if (!c.awaitTermination(2, TimeUnit.SECONDS)) {
-                    c.shutdownNow();
+                if (!channel.awaitTermination(2, TimeUnit.SECONDS)) {
+                    channel.shutdownNow();
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                c.shutdownNow();
+                channel.shutdownNow();
             }
         }
     }

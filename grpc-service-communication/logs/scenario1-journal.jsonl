@@ -1,0 +1,8 @@
+{"topic":"orders","consumerId":"consumer-a","event":"subscribe"}
+{"event":"publish","message":{"messageId":"4848b6a7-7b6e-4916-b66e-b96dcc7aaa52","topic":"orders","payload":"{\"orderId\":\"ORD-1001\",\"amount\":42.50}","messageType":"OrderCreated","correlationId":"3bdf8038-d9f9-472d-bc9c-0812b4045d99","occurredAt":"2026-10-13T00:02:14.102749020+03:00","schemaVersion":"1.0"}}
+{"event":"publish","message":{"messageId":"080a826f-5ae2-4424-8281-c6b40d9402a5","topic":"audit","payload":"{\"orderId\":\"ORD-1001\",\"amount\":42.50}","messageType":"AuditEvent","correlationId":"3bdf8038-d9f9-472d-bc9c-0812b4045d99","occurredAt":"2026-10-13T00:02:14.463694374+03:00","schemaVersion":"1.0"}}
+{"event":"delivery","attempt":1,"messageId":"4848b6a7-7b6e-4916-b66e-b96dcc7aaa52","consumerId":"consumer-a","at":1791838934530}
+{"topic":"orders","consumerId":"consumer-a","event":"unsubscribe"}
+{"topic":"orders","consumerId":"consumer-a","event":"subscribe"}
+{"event":"delivery","attempt":2,"messageId":"4848b6a7-7b6e-4916-b66e-b96dcc7aaa52","consumerId":"consumer-a","at":1791838948059}
+{"consumerId":"consumer-a","event":"ack","messageId":"4848b6a7-7b6e-4916-b66e-b96dcc7aaa52"}
