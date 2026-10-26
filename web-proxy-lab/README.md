@@ -1,4 +1,4 @@
-# PAD — Laboratorul 2: Web Proxy
+# PAD - Laboratorul 3: Web Proxy
 
 Java 17, Maven pentru import IntelliJ; aplicația nu are biblioteci externe.
 
