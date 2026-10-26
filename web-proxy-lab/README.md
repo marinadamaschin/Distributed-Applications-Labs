@@ -1,71 +1,199 @@
-# PAD - Laboratorul 3: Web Proxy
+# Proiectul 3: Web Proxy
 
-Java 17, Maven pentru import IntelliJ; aplicația nu are biblioteci externe.
+Proiect Java pentru intermedierea comunicării Client–Data Warehouse printr-un **reverse proxy HTTP**. Include răspunsuri **JSON/XML**, procesarea concurentă a cererilor, cache cu expirare, distribuirea cererilor prin **Round Robin**, reutilizarea conexiunilor HTTP și identificatori de corelare. Datele gestionate sunt angajați, iar modificările pot fi publicate direct sau propuse pentru confirmare prin mecanismul pull.
 
-## Integrarea în proiectul tău
+## Arhitectură
 
-1. Copiază folderul **web-proxy-lab** în **Distributed-Applications-Labs**, la același nivel cu **grpc-service-communication** și **MessagingAgent**.
-2. În IntelliJ, click dreapta pe `web-proxy-lab/pom.xml` → **Add as Maven Project** (sau Maven → Link Maven Projects și selectează acest pom).
-3. Selectează JDK 17 sau mai nou în Project Structure → Modules → web-proxy-lab → Dependencies.
-4. Deschide `src/main/java/md/utm/pad/Main.java` și apasă Run lângă `main`.
+```mermaid
+flowchart TD
+    C[Client browser sau curl] --> P[Reverse Proxy 8080]
+    P --> K[Cache local cu TTL]
+    P --> W1[Warehouse dw-1 8081]
+    P --> W2[Warehouse dw-2 8082]
+    W1 --> S[EmployeeStore comun în memorie]
+    W2 --> S
+```
 
-Nu înlocui pom-urile celorlalte laboratoare. Acest folder este un modul Maven independent; nu necesită un pom părinte. Cele trei laboratoare vor apărea în același proiect IntelliJ.
+Clientul accesează proxy-ul pe portul `8080`. La o cerere care necesită acces la backend, proxy-ul selectează unul dintre nodurile DW și transmite răspunsul acestuia clientului. La un cache HIT, răspunsul este returnat direct din cache.
 
-Alternativ, în terminal, din folderul web-proxy-lab:
+Cele trei servere HTTP sunt pornite de `Main` în aceeași JVM. Nodurile DW folosesc aceeași instanță `EmployeeStore`, protejată prin metode `synchronized`.
+
+Sursele se află în `src/main/java/md/utm/pad/`:
+
+- `Main.java` — inițializarea și oprirea serverelor și a pool-urilor de fire.
+- `EmployeeStore.java` — stocarea angajaților și a propunerilor de modificare.
+- `WarehouseController.java` — prelucrarea cererilor HTTP asupra datelor.
+- `ProxyController.java` — intermediere, cache, Round Robin și corelare.
+- `HttpUtil.java` — parametri query, răspunsuri HTTP și reprezentări JSON/XML.
+
+## Funcționalități
+
+- **Comunicare HTTP:** GET pentru consultare, PUT pentru publicarea datelor și POST pentru propuneri de modificare.
+- **JSON/XML:** formatul datelor returnate este selectat prin antetul `Accept`.
+- **Procesare concurentă:** fiecare server utilizează un pool de 32 de fire; fiecare cerere activă este procesată de un fir.
+- **Acces sincronizat:** operațiile repository-ului protejează colecțiile comune împotriva accesului simultan necontrolat.
+- **Cache temporar:** răspunsurile cu status 200 la `GET /employees` sunt memorate pentru 5 secunde. Cheia include URI-ul cu parametrii query și valoarea `Accept`.
+- **Invalidare:** cache-ul este golit după primirea unui răspuns la PUT sau POST prin proxy. Un lock citire/scriere coordonează accesul și invalidarea.
+- **Load balancing:** contor atomic pentru selecția Round Robin între `dw-1` și `dw-2`. Cererile rezolvate din cache nu determină o nouă selecție.
+- **Conexiuni și corelare:** HTTP keep-alive către client și un `HttpClient` reutilizat către DW. Fiecare cerere primește un UUID; registrul `inFlight` păstrează temporar contextul clientului, iar `HttpExchange` păstrează legătura cu răspunsul.
+- **Pull pentru modificări:** sursa citește propunerile folosind un cursor `after` și publică starea acceptată prin PUT. Rolul sursei este executat manual prin cereri HTTP.
+- **Gestionarea erorilor:** validare, timeout de conectare de 2 secunde și timeout pe cerere de 5 secunde. La erori de transport pentru GET, proxy-ul încearcă și celălalt DW; scrierile nu sunt repetate automat.
+
+### Garanții și limite
+
+Datele, propunerile și cache-ul sunt păstrate **în memorie** și se pierd la restart. Cele două DW sunt servere HTTP distincte în același proces, nu procese independente. Distribuirea pe calculatoare diferite necesită adaptarea stocării sau sincronizarea datelor. Cassandra și Redis nu sunt incluse.
+
+Scrierile directe către DW ocolesc invalidarea cache-ului. O eroare de transport la scriere poate lăsa rezultatul operației necunoscut și cache-ul neschimbat până la expirare. Limita cache-ului este de aproximativ 1000 de intrări; la atingerea ei, cache-ul este golit, fără politică LRU.
+
+Registrul `inFlight` urmărește cererile active, fără sesiuni persistente sau asocierea unui client cu un DW fix. Aplicația ascultă doar pe loopback și nu include autentificare. Selecția JSON/XML este simplificată: XML dacă `Accept` conține `application/xml`, JSON în rest; ponderile de negociere `q` nu sunt interpretate.
+
+## Cerințe și rulare
+
+Necesită **JDK 17+**, inclusiv `javac`. Aplicația folosește API-uri din JDK, fără biblioteci externe. Porturile `8080`, `8081` și `8082` trebuie să fie libere.
+
+Din rădăcina repository-ului:
 
 ```bash
+cd web-proxy-lab
 bash scripts/run.sh
 ```
 
-Oprește cu Ctrl+C sau butonul Stop din IntelliJ. Porturile 8080, 8081 și 8082 trebuie să fie libere.
+Scriptul compilează sursele în `target/classes` și pornește `md.utm.pad.Main`. Oprirea se face cu `Ctrl+C`.
 
-## Componente și cerințe
+În IntelliJ IDEA, importați `web-proxy-lab/pom.xml` prin **Add as Maven Project**, configurați JDK 17+ și rulați metoda `main` din `Main.java`. Modulul poate fi deschis în același proiect cu celelalte laboratoare.
 
-| Cerință | Implementare |
-|---|---|
-| HTTP concurent, controller | WarehouseController, câte un pool de 32 fire pentru fiecare server; o cerere activă este procesată de un fir |
-| Colecții protejate | EmployeeStore cu metode synchronized și snapshot-uri imutabile |
-| GET și PUT | Consultare și publicare angajați, inclusiv paginare |
-| POST și pull | Propuneri de modificare cu sequence; GET /updates/employees?after=N; sursa confirmă prin PUT |
-| JSON / XML | Accept: application/json sau application/xml; implicit JSON |
-| Reverse proxy | ProxyController, adresă client http://localhost:8080 |
-| Cache | GET /employees, TTL 5 secunde, maximum aproximativ 1000 intrări; cheia include query și Accept |
-| Invalidare | După scrieri; lock citire/scriere împiedică reintroducerea unui răspuns vechi în timpul unei scrieri prin proxy |
-| Round Robin | Contor atomic, alternare între DW 8081 și 8082 la cererile care ajung la backend |
-| Smart Proxy | Corelare cerere–răspuns prin UUID și registru inFlight, curățat la final; conexiuni HTTP persistente către clienți și HttpClient reutilizat către DW |
-| Erori | 400, 404, 405, 413, 415; timeout și 502 la indisponibilitatea DW; retry doar la GET |
+### Configurare
 
-## Demonstrație
+Valorile curente sunt definite în cod; nu există încă variabile de mediu pentru configurare.
 
-Deschide `requests.http` în IntelliJ HTTP Client, dacă ediția ta îl include. Alternativ:
+| Parametru | Valoare | Clasă |
+|---|---|---|
+| Adresă de ascultare | `127.0.0.1` | `Main` |
+| Port proxy | `8080` | `Main` |
+| Porturi DW | `8081`, `8082` | `Main`, `ProxyController` |
+| Fire per server | `32` | `Main` |
+| TTL cache | `5 secunde` | `ProxyController` |
+| Prag cache | Aproximativ `1000` intrări | `ProxyController` |
+| Timeout conectare | `2 secunde` | `ProxyController` |
+| Timeout cerere | `5 secunde` | `ProxyController` |
+
+## API
+
+Adresa utilizată de client: `http://localhost:8080`.
+
+| Metodă | Rută | Operație |
+|---|---|---|
+| GET | `/employees` | Lista angajaților |
+| GET | `/employees?id=1` | Căutare după id |
+| GET | `/employees?offset=1&limit=2` | Paginare în ordinea id-urilor |
+| PUT | `/employees` | Adăugare sau înlocuire angajat |
+| POST | `/employees` | Înregistrare propunere de modificare |
+| GET | `/updates/employees?after=0` | Citirea propunerilor după cursor |
+| GET | `/health` | Răspuns de disponibilitate de la DW selectat |
+
+Scrierile folosesc `application/x-www-form-urlencoded`, de exemplu `id=4&name=Alexandra`. Id-ul trebuie să fie pozitiv, iar numele să aibă între 1 și 100 de caractere după eliminarea spațiilor de la capete, fără caractere de control. Corpul cererii este limitat la 8192 de octeți.
+
+POST răspunde cu `202` și un număr `sequence`, fără a modifica angajatul confirmat. GET updates nu consumă propunerile; sursa urmărește cursorul și confirmă modificarea prin PUT.
+
+### Antete de diagnostic
+
+- `X-Cache: MISS` — răspuns obținut de la DW pentru o citire eligibilă pentru cache.
+- `X-Cache: HIT` — răspuns returnat din cache.
+- `X-Cache: BYPASS` — cache ocolit.
+- `X-Warehouse` — nodul care a generat răspunsul, inclusiv sursa copiei memorate la HIT.
+- `X-Correlation-Id` — identificator unic al cererii către proxy.
+
+`Cache-Control: no-cache` în cerere ocolește cache-ul intern. `Cache-Control: no-store` în răspuns cere clientului să nu păstreze propria copie.
+
+## Verificare înainte de predare
+
+Porniți aplicația și executați cererile din `requests.http` sau comenzile de mai jos într-un terminal separat.
+
+### JSON și XML
 
 ```bash
-curl -i http://localhost:8080/employees
-curl -i http://localhost:8080/employees
+curl -i -H 'Accept: application/json' http://localhost:8080/employees
 curl -i -H 'Accept: application/xml' http://localhost:8080/employees
-curl -i -H 'Cache-Control: no-cache' http://localhost:8080/employees
-curl -i -H 'Cache-Control: no-cache' http://localhost:8080/employees
+```
+
+Rezultat așteptat: aceeași listă în cele două formate.
+
+### Cache și expirare
+
+```bash
+sleep 6
+curl -i -H 'Accept: application/json' http://localhost:8080/employees
+curl -i -H 'Accept: application/json' http://localhost:8080/employees
+sleep 6
+curl -i -H 'Accept: application/json' http://localhost:8080/employees
+```
+
+Rezultat așteptat: **MISS → HIT → MISS**. Primele două cereri trebuie executate la mai puțin de 5 secunde distanță.
+
+### Round Robin
+
+```bash
+for i in 1 2 3 4; do
+  curl -s -D - -o /dev/null \
+    -H 'Cache-Control: no-cache' http://localhost:8080/employees
+done
+```
+
+Rezultat așteptat: `BYPASS` și alternarea `dw-1` / `dw-2`. Nodul inițial depinde de cererile anterioare; alte cereri simultane pot modifica ordinea observată.
+
+### Conexiune persistentă client–proxy
+
+```bash
+curl --http1.1 -v \
+  -H 'Cache-Control: no-cache' \
+  http://localhost:8080/employees \
+  http://localhost:8080/employees \
+  http://localhost:8080/employees
+```
+
+Rezultat așteptat: mesajul `Re-using existing connection with host localhost` sau echivalentul său pentru versiunea curl folosită.
+
+### PUT și invalidarea cache-ului
+
+```bash
 curl -i -X PUT -d 'id=4&name=Alexandra' http://localhost:8080/employees
-curl -i http://localhost:8080/employees
+curl -i 'http://localhost:8080/employees?id=4'
+curl -i 'http://localhost:8080/employees?id=4'
+curl -i -X PUT -d 'id=4&name=Alexandra%20Manea' http://localhost:8080/employees
+curl -i 'http://localhost:8080/employees?id=4'
+```
+
+La executarea consecutivă, cele două citiri din mijloc produc MISS și HIT. Citirea finală produce MISS și numele actualizat.
+
+### POST și pull
+
+```bash
+curl -i -X PUT -d 'id=4&name=Alexandra' http://localhost:8080/employees
 curl -i -X POST -d 'id=4&name=Alexandra%20Manea' http://localhost:8080/employees
 curl -i 'http://localhost:8080/updates/employees?after=0'
+curl -i 'http://localhost:8080/employees?id=4'
 curl -i -X PUT -d 'id=4&name=Alexandra%20Manea' http://localhost:8080/employees
+curl -i 'http://localhost:8080/employees?id=4'
 ```
 
-Repetă primele două cereri în maximum 5 secunde: X-Cache trece de la MISS la HIT. După expirare revine MISS. Cu no-cache observi alternarea X-Warehouse. Fiecare răspuns proxy are un X-Correlation-Id nou, inclusiv răspunsurile din cache.
+După POST, numele confirmat rămâne `Alexandra`. După PUT-ul de confirmare, devine `Alexandra Manea`.
 
-Concurență, în terminal macOS:
+### Cereri concurente
 
 ```bash
-seq 1 20 | xargs -P 8 -I '{}' curl -s -H 'Cache-Control: no-cache' http://localhost:8080/employees
+seq 1 20 | xargs -P 8 -I '{}' curl -s -o /dev/null \
+  -w '%{http_code}\n' -H 'Cache-Control: no-cache' \
+  http://localhost:8080/employees
 ```
 
-## Alegeri și limite explicite
+Rezultat așteptat: 20 de răspunsuri cu status `200`, folosind până la 8 procese curl simultane. Această verificare este funcțională, nu un benchmark de performanță.
 
-Cele două noduri DW sunt servere HTTP distincte în același proces JVM și folosesc aceeași instanță EmployeeStore. Acesta este un model local pentru laborator, cu stocare în memorie: datele și propunerile se pierd la restart. Nodurile nu pot fi distribuite pe calculatoare diferite fără înlocuirea repository-ului cu o bază de date comună. Cassandra și Redis sunt recomandări în enunț și nu sunt incluse în această variantă.
+### Starea verificărilor
 
-Clienții folosesc exclusiv portul 8080. Porturile DW sunt accesibile local pentru etapa 1; scrierile directe în DW ocolesc invalidarea cache-ului, iar datele pot rămâne vechi până la TTL. Toate serverele ascultă doar pe loopback.
+Au fost confirmate manual răspunsurile JSON/XML, cache MISS–HIT, expirarea cache-ului, alternarea nodurilor și reutilizarea conexiunii client–proxy. Scenariile PUT, POST/pull și concurență sunt incluse pentru verificare, fără a fi declarate teste trecute. Proiectul nu conține o suită de teste automate.
 
-Scrierile folosesc application/x-www-form-urlencoded; alegerea JSON/XML se aplică datelor returnate, conform enunțului. Schema simplă: id pozitiv, name de 1–100 caractere. POST înregistrează o propunere; nu schimbă datele confirmate. GET updates nu consumă propunerile, iar sursa urmărește cursorul after și publică versiunea acceptată prin PUT. Rolul sursei este demonstrat prin requests.http/curl; nu există un serviciu separat de sincronizare.
+## Documentație
 
-Cache-ul aparține acestui proxy unic. Registrul Smart Proxy reține contextul cererilor active în memorie și nu este o sesiune persistentă în Redis. HttpClient gestionează reutilizarea conexiunilor; identitatea unui client nu este legată de un DW anume. Nu există autentificare: proiect pentru demonstrație locală.
+- Diagrama de arhitectură este inclusă în acest README și se afișează pe GitHub prin Mermaid.
+- `requests.http` conține exemple de cereri pentru API.
+- `scripts/run.sh` compilează și pornește aplicația.
