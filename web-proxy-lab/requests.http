@@ -1,38 +1,43 @@
-### JSON / cache MISS then HIT (repeat within 5 seconds)
-GET http://localhost:8080/employees
+### Lista JSON: prima cerere MISS, următoarea HIT (în 5 secunde)
+GET http://127.0.0.1:8080/employees
 Accept: application/json
+X-Correlation-Id: intellij-demo-1
 
-### XML is a separate cache entry
-GET http://localhost:8080/employees
+### XML
+GET http://127.0.0.1:8080/employees
 Accept: application/xml
 
-### Round robin: repeat and observe X-Warehouse
-GET http://localhost:8080/employees
+### Format nesuportat: 406
+GET http://127.0.0.1:8080/employees
+Accept: text/csv
+
+### Round Robin: repetați și urmăriți X-Warehouse
+GET http://127.0.0.1:8080/employees
 Cache-Control: no-cache
 
-### Pagination
-GET http://localhost:8080/employees?offset=1&limit=2
-
-### Source node publishes an employee; invalidates cache
-PUT http://localhost:8080/employees
+### Creare 201, repetare 200
+PUT http://127.0.0.1:8080/employees
 Content-Type: application/x-www-form-urlencoded
 
 id=4&name=Alexandra
 
-### Client proposes a modification
-POST http://localhost:8080/employees
+### Cache invalidat, date actualizate
+GET http://127.0.0.1:8080/employees
+
+### Propunere: 202
+POST http://127.0.0.1:8080/employees
 Content-Type: application/x-www-form-urlencoded
 
 id=4&name=Alexandra%20Manea
 
-### Source node polls proposed changes; retains highest sequence as cursor
-GET http://localhost:8080/updates/employees?after=0
+### Pull propuneri
+GET http://127.0.0.1:8080/updates/employees?after=0
 
-### Source confirms modification by publishing it
-PUT http://localhost:8080/employees
+### Confirmare prin PUT
+PUT http://127.0.0.1:8080/employees
 Content-Type: application/x-www-form-urlencoded
 
 id=4&name=Alexandra%20Manea
 
-### Read confirmed data
-GET http://localhost:8080/employees?id=4
+### Health proxy
+GET http://127.0.0.1:8080/health
