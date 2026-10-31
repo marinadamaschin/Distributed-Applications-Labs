@@ -1,0 +1,33 @@
+Verificare: 31 octombrie 2026
+Mediu: Linux, OpenJDK 17.0.20, Python 3 (unittest standard library).
+Sursele au fost compilate cu --release 17, folosind compilatorul JDK
+(com.sun.tools.javac.Main, deoarece mediul nu avea launcherul javac în PATH).
+Testele au fost executate prin scripts/test.sh, cu un launcher local echivalent.
+Nu s-a executat Maven. Nu s-a testat pe macOS în acest mediu.
+
+Rezultat efectiv:
+
+test_old_read_finishing_after_write_cannot_repopulate_cache ... ok
+test_slow_write_does_not_block_reads_or_cache_stale_result ... ok
+test_all_nodes_down ... ok
+test_cache_miss_hit_expiry_and_put_invalidation ... ok
+test_concurrent_requests ... ok
+test_correlation_sessions_and_keepalive ... ok
+test_failover_reads_writes_and_node_recovery ... ok
+test_formats_and_validation ... ok
+test_post_pull_confirmation_and_persistent_proposal ... ok
+test_round_robin_and_independent_processes ... ok
+test_shared_data_and_persistence_after_storage_restart ... ok
+
+Ran 11 tests in 25.772s
+OK
+
+Testele de cluster pornesc 4 procese Java distincte și fișiere temporare.
+Testele de concurență cache folosesc un backend controlat cu evenimente pentru
+intercalarea deterministă a citirilor și scrierilor.
+
+Reproducere pe calculatorul propriu, din web-proxy-lab:
+  bash scripts/test.sh
+
+Sunt necesare JDK 17+ și Python 3. Nu trebuie să porniți manual serverele
+pentru teste. Sursa completă a testelor este inclusă în arhivă.

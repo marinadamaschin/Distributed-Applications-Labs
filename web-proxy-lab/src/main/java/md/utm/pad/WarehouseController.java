@@ -8,14 +8,32 @@ public final class WarehouseController implements HttpHandler {
     private final EmployeeStore store; private final String node;
     public WarehouseController(EmployeeStore store,String node) { this.store=store; this.node=node; }
     public void handle(HttpExchange e) throws IOException {
+        String correlation = HttpUtil.correlation(e);
+        e.getResponseHeaders().set("X-Correlation-Id", correlation);
         e.getResponseHeaders().set("X-Warehouse",node);
+        try {
+            dispatch(e);
+        } catch (IOException ex) {
+            HttpUtil.send(e,503,"text/plain","Storage unavailable; write outcome may be unknown");
+        } finally {
+            System.out.printf("DW=%s correlation=%s method=%s uri=%s status=%d%n",
+                node, correlation, e.getRequestMethod(), e.getRequestURI(), e.getResponseCode());
+        }
+    }
+    private void dispatch(HttpExchange e) throws IOException {
         String method=e.getRequestMethod(), path=e.getRequestURI().getPath();
-        if(path.equals("/health")) { HttpUtil.send(e,200,"text/plain",node+" OK"); return; }
+        if(path.equals("/health")) {
+            if (!method.equals("GET")) { HttpUtil.send(e,405,"text/plain","GET required"); return; }
+            store.health(); HttpUtil.send(e,200,"text/plain",node+" OK"); return;
+        }
         Map<String,String> q=HttpUtil.query(e);
-        boolean xml=Optional.ofNullable(e.getRequestHeaders().getFirst("Accept")).orElse("").contains("application/xml");
-        String type=xml?"application/xml":"application/json";
+        String type=HttpUtil.negotiate(e.getRequestHeaders().getFirst("Accept"));
+        if (type == null) { HttpUtil.send(e,406,"text/plain","Supported formats: application/json, application/xml"); return; }
+        boolean xml=type.equals("application/xml");
         if(method.equals("GET") && path.equals("/updates/employees")) {
-            var changes=store.changes(Long.parseLong(q.getOrDefault("after","0")));
+            long after = Long.parseLong(q.getOrDefault("after","0"));
+            if (after < 0) throw new IllegalArgumentException("after >= 0");
+            var changes=store.changes(after);
             String body=changes.stream().map(c -> xml?"<change><sequence>"+c.sequence()+"</sequence>"+HttpUtil.employee(c.employee(),true)+"</change>":"{\"sequence\":"+c.sequence()+",\"employee\":"+HttpUtil.employee(c.employee(),false)+"}").collect(Collectors.joining(xml?"":","));
             HttpUtil.send(e,200,type,xml?"<changes>"+body+"</changes>":"["+body+"]"); return;
         }
@@ -44,7 +62,9 @@ public final class WarehouseController implements HttpHandler {
             int id=Integer.parseInt(fields.getOrDefault("id","0")); String name=fields.getOrDefault("name","").trim();
             if(id<=0||name.isEmpty()||name.length()>100||name.chars().anyMatch(c->c<32)) throw new IllegalArgumentException("Positive id and name of 1..100 printable characters required");
             var employee=new EmployeeStore.Employee(id,name);
-            if(method.equals("PUT")) { store.put(employee); HttpUtil.send(e,200,type,HttpUtil.employee(employee,xml)); }
+            if(method.equals("PUT")) { boolean created = store.put(employee);
+                if (created) e.getResponseHeaders().set("Location", "/employees?id="+id);
+                HttpUtil.send(e,created?201:200,type,HttpUtil.employee(employee,xml)); }
             else { long sequence=store.propose(employee); HttpUtil.send(e,202,"text/plain","Proposed update sequence="+sequence); }
         } else { e.getResponseHeaders().set("Allow","GET, PUT, POST"); HttpUtil.send(e,405,"text/plain","Method not allowed"); }
     }
